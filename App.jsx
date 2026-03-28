@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "./supabase.js";
 
 // ─── Brand tokens ────────────────────────────────────────────────────────────
 const BRAND = {
@@ -714,27 +715,28 @@ const defaultBusinesses = {
   }
 };
 
-const USERS = [
-  { username: "coach", password: "coach123", role: "coach", name: "Dean", businessId: null },
-  { username: "sarah.acme", password: "acme123", role: "owner", name: "Sarah Mitchell", businessId: "acme" },
-  { username: "james.acme", password: "acme456", role: "member", name: "James Acme", businessId: "acme" },
-  { username: "james.vertex", password: "vertex123", role: "owner", name: "James Vertex", businessId: "vertex" },
-  { username: "amy.vertex", password: "vertex456", role: "member", name: "Amy Chen", businessId: "vertex" },
-];
+// ─── Supabase data layer ──────────────────────────────────────────────────────
 
-// ─── Storage ──────────────────────────────────────────────────────────────────
-const STORAGE_KEY = "twn_v2_businesses";
-
-function loadBusinesses() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {}
-  return defaultBusinesses;
+async function fetchProfile() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+  return data ? { ...data, email: user.email } : null;
 }
 
-function saveBusinesses(biz) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(biz)); } catch {}
+async function fetchBusinesses() {
+  const { data } = await supabase.from('businesses').select('id, name, data');
+  if (!data) return {};
+  const result = {};
+  data.forEach(b => {
+    result[b.id] = { id: b.id, name: b.name, ...(b.data || {}) };
+  });
+  return result;
+}
+
+async function saveBusiness(biz) {
+  const { id, name, ...rest } = biz;
+  await supabase.from('businesses').upsert({ id, name, data: rest, updated_at: new Date().toISOString() });
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -798,17 +800,24 @@ function Modal({ title, onClose, children, footer }) {
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 function Login({ onLogin }) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function handleLogin() {
-    const user = USERS.find(u => u.username === username.trim() && u.password === password);
-    if (user) {
-      onLogin(user);
-    } else {
-      setError("Invalid username or password.");
+  async function handleLogin() {
+    if (!email.trim() || !password) { setError("Please enter your email and password."); return; }
+    setLoading(true); setError("");
+    const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (authError) {
+      setError("Invalid email or password. Please try again.");
+      setLoading(false);
+      return;
     }
+    const profile = await fetchProfile();
+    if (!profile) { setError("Account not set up correctly. Please contact your coach."); setLoading(false); return; }
+    onLogin(profile);
+    setLoading(false);
   }
 
   return (
@@ -821,23 +830,22 @@ function Login({ onLogin }) {
         </div>
         {error && <div className="login-error">{error}</div>}
         <div className="field">
-          <label>Username</label>
-          <input className="input" value={username} onChange={e => setUsername(e.target.value)}
-            placeholder="e.g. coach" onKeyDown={e => e.key === "Enter" && handleLogin()} autoFocus />
+          <label>Email</label>
+          <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com" onKeyDown={e => e.key === "Enter" && handleLogin()} autoFocus />
         </div>
         <div className="field">
           <label>Password</label>
           <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)}
             placeholder="••••••••" onKeyDown={e => e.key === "Enter" && handleLogin()} />
         </div>
-        <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "11px" }} onClick={handleLogin}>
-          Sign In →
+        <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", padding: "11px" }}
+          onClick={handleLogin} disabled={loading}>
+          {loading ? "Signing in..." : "Sign In →"}
         </button>
-        <div style={{ marginTop: 20, padding: "14px", background: BRAND.offWhite, borderRadius: 8, fontSize: 12, color: BRAND.muted }}>
-          <strong style={{ color: BRAND.textSub }}>Demo logins</strong><br />
-          coach / coach123 &nbsp;·&nbsp; sarah.acme / acme123<br />
-          james.vertex / vertex123
-        </div>
+        <p style={{ marginTop: 16, fontSize: 12, color: BRAND.muted, textAlign: "center" }}>
+          Forgot your password? Contact your coach.
+        </p>
       </div>
     </div>
   );
@@ -4073,27 +4081,65 @@ const NAV = [
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [businesses, setBusinesses] = useState(loadBusinesses);
+  const [businesses, setBusinesses] = useState({});
   const [activeBizId, setActiveBizId] = useState(null);
   const [page, setPage] = useState("dashboard");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { saveBusinesses(businesses); }, [businesses]);
-
-  function handleLogin(u) {
-    setUser(u);
-    if (u.businessId) {
-      setActiveBizId(u.businessId);
-    } else {
-      setActiveBizId(Object.keys(businesses)[0]);
+  // Check for existing session on mount
+  useEffect(() => {
+    async function initSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const profile = await fetchProfile();
+        if (profile) {
+          const bizData = await fetchBusinesses();
+          setBusinesses(bizData);
+          setUser(profile);
+          setActiveBizId(profile.business_id || Object.keys(bizData)[0]);
+          setPage("dashboard");
+        }
+      }
+      setLoading(false);
     }
+    initSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") { setUser(null); setBusinesses({}); setActiveBizId(null); }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function handleLogin(profile) {
+    const bizData = await fetchBusinesses();
+    setBusinesses(bizData);
+    setUser(profile);
+    setActiveBizId(profile.business_id || Object.keys(bizData)[0]);
     setPage("dashboard");
   }
 
-  function handleLogout() { setUser(null); setActiveBizId(null); }
-
-  function updateBusiness(updated) {
-    setBusinesses(prev => ({ ...prev, [updated.id]: updated }));
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null); setBusinesses({}); setActiveBizId(null);
   }
+
+  async function updateBusiness(updated) {
+    setBusinesses(prev => ({ ...prev, [updated.id]: updated }));
+    await saveBusiness(updated);
+  }
+
+  if (loading) return (
+    <>
+      <style>{styles}</style>
+      <div className="login-screen">
+        <div style={{ textAlign: "center", color: BRAND.muted }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⊞</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 20, color: BRAND.navy }}>Loading...</div>
+        </div>
+      </div>
+    </>
+  );
 
   if (!user) return (
     <>
@@ -4104,6 +4150,7 @@ export default function App() {
 
   const business = businesses[activeBizId];
   const canEdit = user.role === "coach" || user.role === "owner";
+
 
   const pageTitle = {
     dashboard: "Dashboard",
