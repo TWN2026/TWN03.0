@@ -1050,7 +1050,15 @@ const VTO_TABS = ["Core Values", "Core Focus", "10-Year Target", "3-Year Picture
 
 function VTOPage({ business, onUpdate, canEdit }) {
   const [tab, setTab] = useState(0);
-  const vto = business.vto || {};
+  const vto = {
+    coreValues: [],
+    coreFocus: { purpose: "", niche: "" },
+    tenYear: "",
+    threeYear: { revenue: "", profit: "", clients: "", other: "" },
+    oneYear: { revenue: "", profit: "", goals: [] },
+    issues: [],
+    ...( business.vto || {}),
+  };
 
   function updateVto(key, value) {
     onUpdate({ ...business, vto: { ...vto, [key]: value } });
