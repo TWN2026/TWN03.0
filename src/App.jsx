@@ -736,7 +736,8 @@ async function fetchBusinesses() {
 
 async function saveBusiness(biz) {
   const { id, name, ...rest } = biz;
-  await supabase.from('businesses').upsert({ id, name, data: rest, updated_at: new Date().toISOString() });
+  const { error } = await supabase.from('businesses').upsert({ id, name, data: rest, updated_at: new Date().toISOString() });
+  if (error) console.error('saveBusiness failed:', error);
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
