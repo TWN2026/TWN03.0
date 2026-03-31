@@ -100,7 +100,7 @@ const styles = `
     padding-right: 28px;
   }
 
-  .sidebar-nav { padding: 12px 0; flex: 1; }
+  .sidebar-nav { padding: 12px 0; flex: 1; overflow-y: auto; }
   .nav-section {
     padding: 8px 16px 4px;
     font-size: 10px;
@@ -1050,7 +1050,15 @@ const VTO_TABS = ["Core Values", "Core Focus", "10-Year Target", "3-Year Picture
 
 function VTOPage({ business, onUpdate, canEdit }) {
   const [tab, setTab] = useState(0);
-  const vto = business.vto || {};
+  const vto = {
+    coreValues: [],
+    coreFocus: { purpose: "", niche: "" },
+    tenYear: "",
+    threeYear: { revenue: "", profit: "", clients: "", other: "" },
+    oneYear: { revenue: "", profit: "", goals: [] },
+    issues: [],
+    ...( business.vto || {}),
+  };
 
   function updateVto(key, value) {
     onUpdate({ ...business, vto: { ...vto, [key]: value } });
@@ -4070,6 +4078,7 @@ const NAV = [
   { id: "marketing", label: "Marketing Strategy", icon: "📣" },
   { id: "meetings", label: "Meetings", icon: "📅", section: "Meetings" },
   { id: "scorecard", label: "Scorecard", icon: "📈" },
+  { id: "new_business", label: "New Business", icon: "💼" },
   { id: "financials", label: "Financial Data", icon: "📊" },
   { id: "team", label: "Team", icon: "👥", section: "People" },
   { id: "org_chart", label: "Org Chart", icon: "🏢" },
