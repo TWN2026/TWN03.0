@@ -100,7 +100,7 @@ const styles = `
     padding-right: 28px;
   }
 
-  .sidebar-nav { padding: 12px 0; flex: 1; }
+  .sidebar-nav { padding: 12px 0; flex: 1; overflow-y: auto; }
   .nav-section {
     padding: 8px 16px 4px;
     font-size: 10px;
@@ -4078,6 +4078,7 @@ const NAV = [
   { id: "marketing", label: "Marketing Strategy", icon: "📣" },
   { id: "meetings", label: "Meetings", icon: "📅", section: "Meetings" },
   { id: "scorecard", label: "Scorecard", icon: "📈" },
+  { id: "new_business", label: "New Business", icon: "💼" },
   { id: "financials", label: "Financial Data", icon: "📊" },
   { id: "team", label: "Team", icon: "👥", section: "People" },
   { id: "org_chart", label: "Org Chart", icon: "🏢" },
